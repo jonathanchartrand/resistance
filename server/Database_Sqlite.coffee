@@ -1,6 +1,6 @@
 ﻿sqlite = require 'sqlite3'
 bcrypt = require 'bcryptjs'
-
+# API URL: https://github.com/mapbox/node-sqlite3/wiki/API
 class Database
     
   constructor: ->
@@ -12,13 +12,14 @@ class Database
 
   # cb(err)
   addUser: (name, password, email, cb) ->
-        @connection.query( 
-            "INSERT Users(name, passwd, isValid, email) VALUES (?, HASHBYTES('sha2_256', ?), 1, ?)"
-            [name, password, email]
+      cryptpass = bcrypt.hashSync(password, 8)
+        @connection.run( 
+            "INSERT INTO users(name, passwd, is_valid, email) VALUES (?, ?, true, ?)"
+            [name, cryptpass, email]
             cb)
 
   login: (playerId, ip, cb) ->
-        @connection.query(
+        @connection.run(
             "INSERT Logins(playerId, ip) VALUES (?, ?)" 
             #select player_id, ((ip >> 24) || '.' || ((ip >> 16) & 255) || '.' || ((ip >> 8) & 255) || '.' || (ip & 255) ) as ipstr from logins
             ##will format ip ...
@@ -26,9 +27,10 @@ class Database
             cb)
             
     getUserId: (name, password, cb) ->
-        @connection.query(
-            "SELECT id FROM Users WHERE name=? AND passwd=HASHBYTES('sha2_256', ?) AND isValid=1"
-            [name, password]
+        cryptpass = bcrypt.hashSync(password, 8)
+        @connection.each(
+            "SELECT id FROM Users WHERE name=? AND passwd=? AND isValid=1"
+            [name, cryptpass]
             (err, result) ->
                 console.log err if err
                 return cb(err) if err
@@ -36,7 +38,7 @@ class Database
                 cb(null, result[0].id))
                 
     createGame: (startData, gameType, players, spies, cb) ->
-        @connection.query(
+        @connection.run(
             "BEGIN TRANSACTION CreateGame\n" +
             "SET XACT_ABORT ON\n" +
             "DECLARE @gameId INT\n" +
@@ -65,11 +67,11 @@ class Database
                 games[gameId] = games[gameId] or { gameId: gameId, players: [], gameLogs: [] }
                 games[gameId].gameLogs.push { playerId: logs.playerId, action: logs.action }
             return Object.keys(games).map((key) -> games[key])
-        @connection.query(
+        @connection.each(
             "SELECT GamePlayers.* FROM Games, GamePlayers WHERE Games.id=GamePlayers.gameId AND Games.endTime IS NULL"
             (err, players) ->
                 return cb(err) if err
-                @connection.query(
+                @connection.each(
                     "SELECT GameLog.* FROM Games, GameLogs WHERE Games.id=GameLog.gameId AND Games.endTime IS NULL ORDER BY id",
                     (err, gamelogs) ->
                         return cb(err) if err
@@ -83,7 +85,7 @@ class Database
             
     finishGame: (gameId, spiesWin, cb) ->
         @connection.query(
-            "UPDATE Games SET endTime=SYSUTCDATETIME(), spiesWin=? WHERE id=?"
+            "UPDATE Games SET endTime=datetime('now'), spiesWin=? WHERE id=?"
             [spiesWin, gameId]
             cb)
             
@@ -92,7 +94,7 @@ class Database
             "SELECT id, startTime, endTime, spiesWin, gameType FROM Games WHERE endTime IS NOT NULL ORDER BY startTime"
             "SELECT id, name FROM Users"
             "SELECT gameId, playerId, isSpy FROM GamePlayers as gp, Games as g WHERE gp.gameId = g.id AND g.endTime IS NOT NULL"],
-            (item, cb) => @connection.query item, [], cb
+            (item, cb) => @connection.each, item, [], cb
             (err, res) =>
                 return cb(err) if err?
                 cb null,
