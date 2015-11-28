@@ -4,7 +4,7 @@ DROP TABLE gameplayers;
 DROP TABLE games;
 DROP TABLE users;
 
-/* Original schema: */
+--  Original schema:
 
 CREATE TABLE users
 (
