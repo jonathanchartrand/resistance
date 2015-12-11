@@ -1,4 +1,4 @@
 {
 	"port":8080,
-	"db_connection_string":"/Users/Steelea/Desktop/resistance-sqlite/r.db"
+	"db_connection_string":"path/to/file.db"
 }
